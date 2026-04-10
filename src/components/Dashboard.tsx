@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTheme } from 'next-themes';
-import { fetchAllInvestigationData, CaseData } from '@/lib/data-fetcher';
+import { fetchAllInvestigationData, CaseData, parseDate } from '@/lib/data-fetcher';
 import { 
   CheckCircle2, 
   MapPin, 
@@ -43,6 +43,7 @@ interface DashboardProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
+  selectedStatus: string;
 }
 
 const BANK_CONFIG: { [key: string]: { color: string, patterns: string[] } } = {
@@ -61,7 +62,7 @@ const BANK_CONFIG: { [key: string]: { color: string, patterns: string[] } } = {
   'อื่นๆ': { color: '#64748b', patterns: [] }
 };
 
-export default function Dashboard({ startDate, endDate, selectedProvince, selectedBank, selectedType }: DashboardProps) {
+export default function Dashboard({ startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus }: DashboardProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<{ atm: CaseData[], branch: CaseData[] }>({ atm: [], branch: [] });
   const [activeTab, setActiveTab] = useState<'atm' | 'branch'>('atm');
@@ -118,8 +119,9 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
   const allFilteredData = useMemo(() => {
     const combined = [...data.atm, ...data.branch];
     return combined.filter(item => {
-      if (startDate && item.timestamp && new Date(item.timestamp) < new Date(startDate)) return false;
-      if (endDate && item.timestamp && new Date(item.timestamp) > new Date(endDate)) return false;
+      const itemDate = parseDate(item.timestamp);
+      if (startDate && itemDate && itemDate < new Date(startDate)) return false;
+      if (endDate && itemDate && itemDate > new Date(endDate)) return false;
       if (selectedProvince && !String(item.raw?.[' ภ.จว.'] || item.raw?.['ภ.จว.'] || '').trim().includes(selectedProvince)) return false;
       
       if (selectedBank) {
@@ -134,9 +136,10 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
       }
 
       if (selectedType && item.type !== selectedType) return false;
+      if (selectedStatus && !String(item.status || '').toLowerCase().includes(selectedStatus.toLowerCase())) return false;
       return true;
     });
-  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
+  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus]);
 
   const stats = useMemo(() => {
     const total = allFilteredData.length;
@@ -190,16 +193,31 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
     const s = String(status || '').toLowerCase();
     const a = String(arrest || '').toLowerCase();
     
-    if (a.includes('จับกุม') || s.includes('เสร็จสิ้น') || s.includes('สืบสวนแล้ว') || s.includes('ส่งรายงาน') || s.includes('เรียบร้อย')) {
+    // 🔴 กลุ่มสีแดง: ปัญหา/ไม่สำเร็จ (เช็คก่อนเพื่อ Override สีเขียว)
+    if (
+      s.includes('ไม่พบ') || 
+      s.includes('ไม่สามารถ') ||
+      s.includes('ไม่ยืนยัน') || 
+      s.includes('ยกเลิก')
+    ) {
+      return 'bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/20';
+    }
+
+    // 🟢 กลุ่มสีเขียว: สำเร็จ/เสร็จสิ้น
+    if (
+      a.includes('จับกุม') || 
+      s.includes('เสร็จสิ้น') || 
+      s.includes('สืบสวนแล้ว') || 
+      s.includes('ส่งรายงาน') || 
+      s.includes('รายงานสืบ') || 
+      s.includes('จัดทำรายงาน') || 
+      s.includes('เรียบร้อย')
+    ) {
       return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/20';
     }
 
     if (s.includes('ยืนยันตัว') || s.includes('พิสูจน์ทราบ') || s.includes('ออกหมาย') || s.includes('รู้ตัว') || s.includes('ส่งสภ')) {
       return 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/20';
-    }
-
-    if (s.includes('ไม่ยืนยัน') || s.includes('ไม่ชัด') || s.includes('ไม่พบ') || s.includes('ยกเลิก')) {
-      return 'bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/20';
     }
     
     return 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border-amber-500/20';

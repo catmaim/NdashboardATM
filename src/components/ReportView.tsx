@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchAllInvestigationData, CaseData } from '@/lib/data-fetcher';
+import { fetchAllInvestigationData, CaseData, parseDate } from '@/lib/data-fetcher';
 import { 
   FileText, 
   CheckCircle2, 
@@ -29,6 +29,7 @@ interface ReportViewProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
+  selectedStatus: string;
 }
 
 const PROVINCES = ['ภูเก็ต', 'กระบี่', 'พังงา', 'ระนอง', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'ชุมพร'];
@@ -39,7 +40,7 @@ type SortConfig = {
   direction: 'asc' | 'desc';
 };
 
-export default function ReportView({ startDate, endDate, selectedProvince, selectedBank, selectedType }: ReportViewProps) {
+export default function ReportView({ startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus }: ReportViewProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,10 +106,11 @@ export default function ReportView({ startDate, endDate, selectedProvince, selec
 
       // Type Filter
       if (selectedType && item.type !== selectedType) return false;
+      if (selectedStatus && !String(item.status || '').toLowerCase().includes(selectedStatus.toLowerCase())) return false;
       
       return true;
     });
-  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
+  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus]);
 
   const reportStats = useMemo(() => {
     const stats = PROVINCES.map(p => {

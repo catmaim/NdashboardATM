@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchAllInvestigationData, CaseData } from '@/lib/data-fetcher';
+import { fetchAllInvestigationData, CaseData, parseDate } from '@/lib/data-fetcher';
 import { 
   MapPin, 
   CreditCard, 
@@ -25,6 +25,7 @@ interface ProvinceViewProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
+  selectedStatus: string;
 }
 
 const PROVINCES = ['ภูเก็ต', 'กระบี่', 'พังงา', 'ระนอง', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'ชุมพร'];
@@ -35,7 +36,7 @@ type SortConfig = {
   direction: 'asc' | 'desc';
 };
 
-export default function ProvinceView({ startDate, endDate, selectedProvince, selectedBank, selectedType }: ProvinceViewProps) {
+export default function ProvinceView({ startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus }: ProvinceViewProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,10 +102,11 @@ export default function ProvinceView({ startDate, endDate, selectedProvince, sel
 
       // Type Filter
       if (selectedType && item.type !== selectedType) return false;
+      if (selectedStatus && !String(item.status || '').toLowerCase().includes(selectedStatus.toLowerCase())) return false;
       
       return true;
     });
-  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
+  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus]);
 
   const provinceStats = useMemo(() => {
     const stats = PROVINCES.map(p => {
@@ -155,7 +157,62 @@ export default function ProvinceView({ startDate, endDate, selectedProvince, sel
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 animate-in fade-in duration-1000">
+      {/* Province Tactical Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {provinceStats.filter(p => p.total > 0).map((p, idx) => {
+          const provinceColor = COLORS[PROVINCES.indexOf(p.province)] || '#3b82f6';
+          return (
+            <div key={idx} className="bg-card p-6 rounded-[2.5rem] border border-border shadow-sm hover:shadow-xl transition-all group overflow-hidden relative" style={{ borderBottom: `4px solid ${provinceColor}` }}>
+              <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.1] transition-opacity" style={{ color: provinceColor }}>
+                <MapPin size={80} />
+              </div>
+              
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 rounded-2xl transition-colors" style={{ backgroundColor: `${provinceColor}15`, color: provinceColor }}>
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h4 className="font-black text-sm uppercase tracking-tighter">{p.province}</h4>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Zone 8 Command</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Ops</p>
+                  <p className="text-xl font-black tracking-tighter text-foreground">{p.total}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reported</p>
+                  <p className="text-xl font-black tracking-tighter text-emerald-500">{p.reported}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-end">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Capital Damage</p>
+                  <p className="text-xs font-black text-red-600">฿{p.damage.toLocaleString()}</p>
+                </div>
+                <div className="w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full transition-all duration-1000" 
+                    style={{ 
+                      width: `${p.total > 0 ? (p.reported / p.total) * 100 : 0}%`,
+                      backgroundColor: provinceColor
+                    }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-[8px] font-black uppercase tracking-widest">
+                  <span className="text-slate-400">ATM: {p.atm}</span>
+                  <span className="text-slate-400">BRANCH: {p.branch}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
           <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">

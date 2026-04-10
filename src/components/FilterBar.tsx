@@ -9,35 +9,42 @@ interface FilterBarProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
-  onStartDateChange: (date: string) => void;
-  onEndDateChange: (date: string) => void;
-  onProvinceChange: (province: string) => void;
-  onBankChange: (bank: string) => void;
-  onTypeChange: (type: string) => void;
+  selectedStatus: string;
+  onStartDateChange: (val: string) => void;
+  onEndDateChange: (val: string) => void;
+  onProvinceChange: (val: string) => void;
+  onBankChange: (val: string) => void;
+  onTypeChange: (val: string) => void;
+  onStatusChange: (val: string) => void;
   onClear: () => void;
-}
+  }
 
-const PROVINCES = [
+  const PROVINCES = [
   'ภูเก็ต', 'กระบี่', 'พังงา', 'ระนอง', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'ชุมพร'
-];
+  ];
 
-const BANKS = [
+  const BANKS = [
   'กสิกรไทย', 'ไทยพาณิชย์', 'กรุงเทพ', 'กรุงไทย', 'กรุงศรี', 'ออมสิน', 'ทีทีบี', 'ธ.ก.ส.', 'ยูโอบี'
-];
+  ];
 
-export default function FilterBar({
+  const STATUSES = [
+    'จัดทำรายงานสืบแล้ว', 'อยู่ระหว่างสืบสวน', 'ไม่สามารถดำเนินการได้', 'ยังไม่ได้รับงาน'
+  ];
+  export default function FilterBar({
   startDate,
   endDate,
   selectedProvince,
   selectedBank,
   selectedType,
+  selectedStatus,
   onStartDateChange,
   onEndDateChange,
   onProvinceChange,
   onBankChange,
   onTypeChange,
+  onStatusChange,
   onClear
-}: FilterBarProps) {
+  }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900/50 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-inner mb-8 transition-colors duration-300">
       {/* Date Range */}
@@ -99,6 +106,21 @@ export default function FilterBar({
           <option value="">ทุกประเภทการถอน</option>
           <option value="atm">ATM Withdrawal</option>
           <option value="branch">Branch Counter</option>
+        </select>
+      </div>
+
+      {/* Status Selector */}
+      <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-800 transition-colors">
+        <Filter size={16} className="text-amber-600 dark:text-amber-500" />
+        <select 
+          className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-300 outline-none pr-4 cursor-pointer"
+          value={selectedStatus}
+          onChange={(e) => onStatusChange(e.target.value)}
+        >
+          <option value="">ทุกสถานะงาน</option>
+          {STATUSES.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
         </select>
       </div>
 

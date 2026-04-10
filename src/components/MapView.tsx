@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { fetchAllInvestigationData, CaseData } from '@/lib/data-fetcher';
+import { fetchAllInvestigationData, CaseData, parseDate } from '@/lib/data-fetcher';
 import { 
   ShieldAlert, 
   Search, 
   CreditCard, 
   Building2, 
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
   Filter,
   Layers,
@@ -17,7 +18,10 @@ import {
   Navigation,
   LocateFixed,
   TrendingUp,
-  Map as MapIcon
+  Map as MapIcon,
+  Clock,
+  MapPin,
+  Compass
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { useTheme } from 'next-themes';
@@ -28,6 +32,7 @@ interface MapViewProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
+  selectedStatus: string;
 }
 
 interface GroupedPoint {
@@ -62,7 +67,7 @@ const BANK_CONFIG: { [key: string]: { color: string, patterns: string[] } } = {
   'อื่นๆ': { color: '#64748b', patterns: [] }
 };
 
-export default function MapView({ startDate, endDate, selectedProvince, selectedBank, selectedType }: MapViewProps) {
+export default function MapView({ startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus }: MapViewProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +75,9 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [L, setL] = useState<any>(null);
   const [mapInstance, setMapInstance] = useState<any>(null);
+
+  const [feedPage, setFeedPage] = useState(1);
+  const itemsPerFeedPage = 10;
 
   const isDark = theme === 'dark';
 
@@ -84,9 +92,8 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
     return bankRaw || 'อื่นๆ';
   };
 
-  const getBankColor = (bankName: string) => {
-    const dummyItem = { bank: bankName, type: 'branch' } as any;
-    const name = identifyBank(dummyItem);
+  const getBankColor = (item: CaseData) => {
+    const name = identifyBank(item);
     return BANK_CONFIG[name]?.color || '#94a3b8';
   };
 
@@ -123,12 +130,13 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
       }
 
       if (selectedType && p.type !== selectedType) return false;
+      if (selectedStatus && !String(p.status || '').toLowerCase().includes(selectedStatus.toLowerCase())) return false;
 
       const searchStr = searchTerm.toLowerCase();
       return String(p.accountName || '').toLowerCase().includes(searchStr) ||
              String(p.location || '').toLowerCase().includes(searchStr);
     });
-  }, [data, searchTerm, startDate, endDate, selectedProvince, selectedBank, selectedType]);
+  }, [data, searchTerm, startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus]);
 
   const groupedPoints = useMemo(() => {
     const groups: { [key: string]: GroupedPoint } = {};
@@ -165,6 +173,7 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
         <div class="relative flex items-center justify-center">
           <div class="absolute inset-0 rounded-full animate-ping opacity-20" style="background-color: ${color}; animation-duration: 3s;"></div>
           <div class="absolute inset-[-8px] rounded-full animate-pulse opacity-10" style="background-color: ${color};"></div>
+          
           <div class="rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-xl transition-all duration-500 hover:scale-125 relative z-10" 
                style="background-color: ${color}; width: ${size}px; height: ${size}px;">
             <span class="text-white text-[9px] font-black">${count}</span>
@@ -234,7 +243,9 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
             </div>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
-            {groupedPoints.sort((a, b) => b.count - a.count).map((g, idx) => (
+            {groupedPoints.sort((a, b) => b.count - a.count)
+              .slice((feedPage - 1) * itemsPerFeedPage, feedPage * itemsPerFeedPage)
+              .map((g, idx) => (
               <div key={idx} onClick={() => flyTo(g.lat, g.lng)} className="bg-slate-50/50 dark:bg-white/5 p-6 rounded-[2rem] border border-border hover:border-primary transition-all group cursor-pointer">
                 <div className="flex items-center gap-4 mb-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg ${g.totalAmount > 100000 ? 'bg-red-600' : 'bg-blue-600'}`}>
@@ -252,13 +263,34 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
                 
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-200 dark:border-slate-800 mt-2">
                   {Array.from(new Set(g.items.map(i => identifyBank(i)))).map((bankName, bIdx) => (
-                    <span key={bIdx} className="px-2 py-0.5 rounded text-[8px] font-black text-white uppercase shadow-sm" style={{ backgroundColor: getBankColor(bankName) }}>
+                    <span key={bIdx} className="px-2 py-0.5 rounded text-[8px] font-black text-white uppercase shadow-sm" style={{ backgroundColor: BANK_CONFIG[bankName]?.color || '#94a3b8' }}>
                       {bankName}
                     </span>
                   ))}
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Pagination Controls for Feed */}
+          <div className="p-6 border-t border-border bg-slate-50/50 dark:bg-white/5 flex justify-between items-center">
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Page {feedPage} of {Math.ceil(groupedPoints.length / itemsPerFeedPage)}</span>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setFeedPage(p => Math.max(1, p - 1))} 
+                disabled={feedPage === 1}
+                className="p-2 bg-background border border-border rounded-lg text-slate-400 disabled:opacity-30"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button 
+                onClick={() => setFeedPage(p => Math.min(Math.ceil(groupedPoints.length / itemsPerFeedPage), p + 1))} 
+                disabled={feedPage >= Math.ceil(groupedPoints.length / itemsPerFeedPage)}
+                className="p-2 bg-background border border-border rounded-lg text-slate-400 disabled:opacity-30"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -274,7 +306,7 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
                   <Circle center={[g.lat, g.lng]} radius={circleRadius} pathOptions={{ fillColor: color, fillOpacity: 0.08, color: color, weight: 1, dashArray: '3, 6' }} />
                   <Marker position={[g.lat, g.lng]} icon={g.icon}>
                     <Popup>
-                      <div className="p-4 min-w-[280px] font-sans">
+                      <div className="p-4 min-w-[320px] font-sans">
                         <div className="flex items-center gap-3 mb-3 border-b border-slate-100 pb-3">
                           <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary"><ShieldAlert size={20} /></div>
                           <div>
@@ -283,32 +315,52 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
                           </div>
                         </div>
                         <div className="space-y-2">
-                          <div className="max-h-[120px] overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl space-y-2">
+                          <div className="max-h-[180px] overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl space-y-2">
                             {g.items.map((item: any, i: number) => (
-                              <div key={i} className="flex flex-col gap-1 p-2 bg-white rounded-lg border border-slate-100 shadow-sm">
+                              <div key={i} className="flex flex-col gap-1.5 p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
                                 <div className="flex justify-between items-center">
                                   <span className="text-[10px] font-black text-slate-700 uppercase">{item.accountName}</span>
                                   <span className="text-[10px] font-black text-red-600">฿{item.amount?.toLocaleString()}</span>
                                 </div>
-                                <div className="flex gap-2">
-                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase" style={{ backgroundColor: getBankColor(item.bank || '') }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[8px] font-black px-1.5 py-0.5 rounded text-white uppercase" style={{ backgroundColor: getBankColor(item) }}>
                                     {identifyBank(item)}
                                   </span>
                                   <span className="text-[8px] font-bold text-slate-400 uppercase">
                                     {item.type === 'atm' ? 'ATM' : 'BRANCH'}
                                   </span>
                                 </div>
+                                <div className="flex items-center gap-1.5 text-[8px] font-bold text-slate-400 pt-1 border-t border-slate-50 mt-1">
+                                  <Clock size={10} className="text-blue-500" />
+                                  {item.timestamp || 'N/A'}
+                                </div>
                               </div>
                             ))}
                           </div>
-                          <div className="flex justify-between items-center pt-2">
-                            <div className="flex flex-col">
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Intelligence</p>
-                              <p className="text-lg font-black text-red-600 tracking-tighter">฿{g.totalAmount.toLocaleString()}</p>
+                          <div className="flex flex-col gap-2 pt-2">
+                            <div className="flex justify-between items-center">
+                              <div className="flex flex-col">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Intelligence</p>
+                                <p className="text-lg font-black text-red-600 tracking-tighter">฿{g.totalAmount.toLocaleString()}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${g.lat},${g.lng}`, '_blank')}
+                                  className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2 text-[9px] font-black uppercase"
+                                  title="Navigate"
+                                >
+                                  <Compass size={14} /> NAV
+                                </button>
+                                {g.items[0].reportLink && (
+                                  <button 
+                                    onClick={() => window.open(g.items[0].reportLink, '_blank')} 
+                                    className="p-2.5 bg-[#0f172a] text-white rounded-xl hover:bg-primary transition-all shadow-lg flex items-center gap-2 text-[9px] font-black uppercase"
+                                  >
+                                    <ExternalLink size={14} /> INTEL
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <button onClick={() => window.open(g.items[0].reportLink, '_blank')} className="p-2.5 bg-[#0f172a] text-white rounded-xl hover:bg-primary transition-all shadow-lg flex items-center gap-2 text-[9px] font-black uppercase">
-                              <ExternalLink size={14} /> Report
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -322,9 +374,22 @@ export default function MapView({ startDate, endDate, selectedProvince, selected
           <div className="absolute bottom-8 right-8 bg-card/90 backdrop-blur-xl p-6 rounded-[2.5rem] border border-border shadow-2xl z-[1000] hidden md:block">
             <h4 className="text-[9px] font-black text-foreground uppercase tracking-[0.2em] mb-4 border-b border-border pb-2">Indicators</h4>
             <div className="space-y-3">
-              <div className="flex items-center gap-3"><div className="h-2 w-2 rounded-full bg-red-600"></div><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Critical Node</span></div>
-              <div className="flex items-center gap-3"><div className="h-2 w-2 rounded-full bg-blue-600"></div><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Operational</span></div>
-              <div className="flex items-center gap-3"><div className="w-4 h-px border-t border-dashed border-slate-400"></div><span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Compact Radius</span></div>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-red-600"></div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Critical (&gt; 100K THB)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-amber-500"></div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">High Alert (&gt; 50K THB)</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Operational (&lt; 50K THB)</span>
+              </div>
+              <div className="pt-2 border-t border-border flex items-center gap-3">
+                <div className="w-4 h-px border-t border-dashed border-slate-400"></div>
+                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Dynamic Radius</span>
+              </div>
             </div>
           </div>
         </div>

@@ -95,6 +95,40 @@ async function fetchCSV(url: string, type: 'atm' | 'branch'): Promise<CaseData[]
   }
 }
 
+export function parseDate(dateStr: any): Date | null {
+  if (!dateStr) return null;
+  if (dateStr instanceof Date) return dateStr;
+  
+  const str = String(dateStr).trim();
+  if (!str) return null;
+
+  // ลอง parse แบบ ISO ก่อน (YYYY-MM-DD)
+  const isoDate = new Date(str);
+  if (!isNaN(isoDate.getTime()) && str.includes('-')) return isoDate;
+
+  // จัดการรูปแบบ DD/MM/YYYY หรือ DD/MM/YYYY HH:mm:ss
+  const parts = str.split(/[\/\s:]/);
+  if (parts.length >= 3) {
+    let day = parseInt(parts[0]);
+    let month = parseInt(parts[1]) - 1; // Months are 0-indexed
+    let year = parseInt(parts[2]);
+    let hour = parts[3] ? parseInt(parts[3]) : 0;
+    let minute = parts[4] ? parseInt(parts[4]) : 0;
+    let second = parts[5] ? parseInt(parts[5]) : 0;
+
+    // จัดการปี พ.ศ. (ถ้าเกิน 2400 แปลว่าเป็น พ.ศ.)
+    if (year > 2400) year -= 543;
+    
+    // ถ้าปีมีแค่ 2 หลัก (เช่น 24, 25) ให้เดาว่าเป็น ค.ศ. 20xx
+    if (year < 100) year += 2000;
+
+    const date = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(date.getTime())) return date;
+  }
+
+  return isNaN(isoDate.getTime()) ? null : isoDate;
+}
+
 export async function fetchAllInvestigationData(): Promise<{ atm: CaseData[], branch: CaseData[] }> {
   try {
     const [atmData, branchData] = await Promise.all([

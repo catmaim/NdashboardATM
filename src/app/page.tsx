@@ -19,6 +19,7 @@ export default function Home() {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedBank, setSelectedBank] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
 
   const clearFilters = () => {
     setStartDate('');
@@ -26,10 +27,11 @@ export default function Home() {
     setSelectedProvince('');
     setSelectedBank('');
     setSelectedType('');
+    setSelectedStatus('');
   };
 
   const renderView = () => {
-    const filterProps = { startDate, endDate, selectedProvince, selectedBank, selectedType };
+    const filterProps = { startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus };
 
     switch (activeView) {
       case 'dashboard':
@@ -56,11 +58,13 @@ export default function Home() {
           selectedProvince={selectedProvince}
           selectedBank={selectedBank}
           selectedType={selectedType}
+          selectedStatus={selectedStatus}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
           onProvinceChange={setSelectedProvince}
           onBankChange={setSelectedBank}
           onTypeChange={setSelectedType}
+          onStatusChange={setSelectedStatus}
           onClear={clearFilters}
         />
         {renderView()}

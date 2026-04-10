@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchAllInvestigationData, CaseData } from '@/lib/data-fetcher';
+import { fetchAllInvestigationData, CaseData, parseDate } from '@/lib/data-fetcher';
 import { 
   UserCircle2, 
   TrendingUp, 
@@ -17,7 +17,9 @@ import {
   Target,
   MapPin,
   Clock,
-  ExternalLink
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -31,6 +33,7 @@ interface MuleAccountViewProps {
   selectedProvince: string;
   selectedBank: string;
   selectedType: string;
+  selectedStatus: string;
 }
 
 type MuleStats = {
@@ -45,12 +48,14 @@ type MuleStats = {
   lastBank: string;
 };
 
-export default function MuleAccountView({ startDate, endDate, selectedProvince, selectedBank, selectedType }: MuleAccountViewProps) {
+export default function MuleAccountView({ startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus }: MuleAccountViewProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{key: string, direction: 'asc'|'desc'}>({ key: 'count', direction: 'desc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const isDark = theme === 'dark';
 
@@ -112,10 +117,11 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
 
       // Type Filter
       if (selectedType && item.type !== selectedType) return false;
+      if (selectedStatus && !String(item.status || '').toLowerCase().includes(selectedStatus.toLowerCase())) return false;
       
       return true;
     });
-  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
+  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType, selectedStatus]);
 
   const muleAccounts = useMemo(() => {
     const muleMap: { [key: string]: MuleStats } = {};
@@ -222,7 +228,7 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
           </div>
         </div>
 
-        <div className="overflow-x-auto px-6 pb-8">
+        <div className="overflow-x-auto px-6 pb-4">
           <table className="w-full text-left border-separate border-spacing-y-3">
             <thead>
               <tr className="text-slate-400 dark:text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black cursor-pointer select-none">
@@ -235,7 +241,9 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
               </tr>
             </thead>
             <tbody>
-              {muleAccounts.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.accountNumber.includes(searchTerm)).slice(0, 100).map((m, idx) => (
+              {muleAccounts.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || m.accountNumber.includes(searchTerm))
+                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .map((m, idx) => (
                 <tr key={idx} className="bg-white dark:bg-slate-900/30 hover:bg-slate-50 dark:hover:bg-white/10 transition-all group border border-transparent shadow-sm dark:shadow-none">
                   <td className="px-6 py-6 first:rounded-l-2xl border-l-2 border-transparent hover:border-red-500">
                     <div className="flex items-center gap-4">
@@ -265,6 +273,26 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="p-8 border-t border-border flex justify-between items-center bg-slate-50/50 dark:bg-white/5 transition-colors">
+          <span className="text-[10px] font-black text-slate-400 tracking-widest uppercase">Target Intelligence {currentPage} of {Math.ceil(muleAccounts.length / itemsPerPage)}</span>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+              disabled={currentPage === 1} 
+              className="p-2.5 bg-background border border-border rounded-xl text-slate-400 hover:text-primary disabled:opacity-30 transition-all"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button 
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(muleAccounts.length / itemsPerPage), p + 1))} 
+              disabled={currentPage >= Math.ceil(muleAccounts.length / itemsPerPage)} 
+              className="p-2.5 bg-background border border-border rounded-xl text-slate-400 hover:text-primary disabled:opacity-30 transition-all"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
