@@ -22,6 +22,9 @@ import { useTheme } from 'next-themes';
 interface ProvinceViewProps {
   startDate: string;
   endDate: string;
+  selectedProvince: string;
+  selectedBank: string;
+  selectedType: string;
 }
 
 const PROVINCES = ['ภูเก็ต', 'กระบี่', 'พังงา', 'ระนอง', 'สุราษฎร์ธานี', 'นครศรีธรรมราช', 'ชุมพร'];
@@ -32,7 +35,7 @@ type SortConfig = {
   direction: 'asc' | 'desc';
 };
 
-export default function ProvinceView({ startDate, endDate }: ProvinceViewProps) {
+export default function ProvinceView({ startDate, endDate, selectedProvince, selectedBank, selectedType }: ProvinceViewProps) {
   const { theme } = useTheme();
   const [data, setData] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +54,57 @@ export default function ProvinceView({ startDate, endDate }: ProvinceViewProps) 
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
+      // Date Filter
       if (startDate && item.timestamp && new Date(item.timestamp) < new Date(startDate)) return false;
       if (endDate && item.timestamp && new Date(item.timestamp) > new Date(endDate)) return false;
+      
+      // Province Filter
+      const prov = String(item.raw?.[' ภ.จว.'] || item.raw?.['ภ.จว.'] || '').trim();
+      if (selectedProvince && !prov.includes(selectedProvince)) return false;
+      
+      // Bank Filter
+      if (selectedBank) {
+        const bankRaw = item.type === 'atm' ? (item.raw?.['เจ้าของเครื่อง'] || item.bank || '') : (item.bank || '');
+        const bankName = String(bankRaw).trim().toUpperCase();
+        const selectedBankUpper = selectedBank.toUpperCase();
+        
+        const patterns: { [key: string]: string[] } = {
+          'กสิกรไทย': ['กสิกร', 'KBANK', 'K-BANK'],
+          'ไทยพาณิชย์': ['ไทยพาณิชย์', 'SCB'],
+          'กรุงเทพ': ['กรุงเทพ', 'BBL'],
+          'กรุงไทย': ['กรุงไทย', 'KTB'],
+          'กรุงศรี': ['กรุงศรี', 'BAY'],
+          'ออมสิน': ['ออมสิน', 'GSB'],
+          'ทีทีบี': ['ทีทีบี', 'TTB', 'ทหารไทย'],
+          'ธ.ก.ส.': ['ธ.ก.ส', 'ธกส', 'BAAC'],
+          'ยูโอบี': ['ยูโอบี', 'UOB'],
+          'ซีไอเอ็มบี': ['ซีไอเอ็มบี', 'CIMB'],
+          'แลนด์ แอนด์ เฮ้าส์': ['แลนด์ แอนด์ เฮ้าส์', 'LH BANK', 'LHB'],
+          'อาคารสงเคราะห์': ['อาคารสงเคราะห์', 'GH BANK']
+        };
+
+        let isMatch = bankName.includes(selectedBankUpper);
+        if (!isMatch && patterns[selectedBank]) {
+          isMatch = patterns[selectedBank].some(p => bankName.includes(p.toUpperCase()));
+        }
+        
+        if (!isMatch && item.bank) {
+          const bField = String(item.bank).toUpperCase();
+          isMatch = bField.includes(selectedBankUpper);
+          if (!isMatch && patterns[selectedBank]) {
+            isMatch = patterns[selectedBank].some(p => bField.includes(p.toUpperCase()));
+          }
+        }
+
+        if (!isMatch) return false;
+      }
+
+      // Type Filter
+      if (selectedType && item.type !== selectedType) return false;
+      
       return true;
     });
-  }, [data, startDate, endDate]);
+  }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
 
   const provinceStats = useMemo(() => {
     const stats = PROVINCES.map(p => {
@@ -100,49 +149,30 @@ export default function ProvinceView({ startDate, endDate }: ProvinceViewProps) 
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 animate-pulse">
-      <ShieldCheck className="text-primary" size={48} />
-      <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest text-center">Assembling provincial intel...</p>
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
     </div>
   );
 
   return (
-    <div className="animate-in fade-in duration-700 space-y-10">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
-        {chartStats.map((p, idx) => (
-          <div key={idx} className="bg-card p-5 rounded-3xl border border-border shadow-sm hover:shadow-md transition-all group">
-            <div className="flex justify-between items-start mb-3">
-              <div className="p-2 bg-slate-50 dark:bg-white/5 rounded-xl border border-border text-slate-400 group-hover:text-blue-500 transition-colors"><MapPin size={16} /></div>
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">P8 Unit</span>
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{p.province}</p>
-            <h4 className="text-xl font-black text-slate-800 dark:text-white tracking-tighter">{p.total} <span className="text-[10px] text-slate-400 font-bold tracking-normal uppercase ml-1">Cases</span></h4>
-            <div className="mt-3 pt-3 border-t border-border flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase">
-              <span>฿{(p.damage / 1000000).toFixed(1)}M</span>
-              <span className="text-emerald-500">{((p.total / (filteredData.length || 1)) * 100).toFixed(0)}%</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
+    <div className="space-y-8">
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm transition-colors duration-300">
+        <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
           <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-            <BarChart3 size={16} className="text-blue-500" /> ATM vs Branch Distribution (Sorted)
+            <BarChart3 size={16} className="text-blue-500" /> Case Distribution by Province
           </h3>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartStats} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#1e293b' : '#e2e8f0'} />
-                <XAxis dataKey="province" fontSize={10} fontWeight="bold" stroke={isDark ? '#94a3b8' : '#64748b'} interval={0} height={40} />
+                <XAxis dataKey="province" fontSize={10} fontWeight="bold" stroke={isDark ? '#94a3b8' : '#64748b'} interval={0} />
                 <YAxis fontSize={10} stroke={isDark ? '#94a3b8' : '#64748b'} />
-                <Tooltip cursor={{fill: 'currentColor', opacity: 0.05}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} />
-                <Bar dataKey="atm" name="ATM Withdrawal" fill="#3b82f6" stackId="a">
-                  <LabelList dataKey="atm" position="center" style={{ fontSize: 9, fontWeight: 'bold', fill: '#fff' }} />
-                </Bar>
-                <Bar dataKey="branch" name="Branch Counter" fill="#10b981" stackId="a" radius={[4, 4, 0, 0]}>
-                  <LabelList dataKey="branch" position="center" style={{ fontSize: 9, fontWeight: 'bold', fill: '#fff' }} />
+                <Tooltip cursor={{ fill: 'currentColor', opacity: 0.05 }} />
+                <Bar dataKey="total" fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                  {chartStats.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[PROVINCES.indexOf(entry.province)] || '#3b82f6'} />
+                  ))}
+                  <LabelList dataKey="total" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: isDark ? '#94a3b8' : '#64748b' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -151,16 +181,25 @@ export default function ProvinceView({ startDate, endDate }: ProvinceViewProps) 
 
         <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
           <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2">
-            <PieChartIcon size={16} className="text-purple-500" /> Share of Operations by Province
+            <PieChartIcon size={16} className="text-emerald-500" /> Operational Share by Province
           </h3>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={chartStats} innerRadius={70} outerRadius={100} paddingAngle={5} dataKey="total" nameKey="province">
-                  {chartStats.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                <Pie
+                  data={chartStats.filter(s => s.total > 0)}
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={5}
+                  dataKey="total"
+                  nameKey="province"
+                >
+                  {chartStats.filter(s => s.total > 0).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[PROVINCES.indexOf(entry.province)] || '#3b82f6'} />
+                  ))}
                 </Pie>
                 <Tooltip />
-                <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '20px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -168,38 +207,43 @@ export default function ProvinceView({ startDate, endDate }: ProvinceViewProps) 
       </div>
 
       <div className="bg-card rounded-[2.5rem] border border-border shadow-xl overflow-hidden">
-        <div className="p-8 border-b border-border bg-slate-50/50 dark:bg-white/5 transition-colors">
-          <h3 className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-widest flex items-center gap-3">
-            <ShieldCheck size={20} className="text-blue-500" /> Provincial Operational Breakdown
+        <div className="p-8 border-b border-border bg-slate-50/50 dark:bg-white/5">
+          <h3 className="font-black text-xs text-foreground tracking-[0.2em] uppercase flex items-center gap-2">
+            <MapPin size={16} className="text-red-500" /> Detailed Province Intelligence
           </h3>
         </div>
-        <div className="overflow-x-auto px-6 pb-8">
-          <table className="w-full text-left border-separate border-spacing-y-3">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="text-slate-400 dark:text-slate-500 text-[10px] uppercase tracking-[0.25em] font-black cursor-pointer select-none">
-                <th className="px-6 py-4" onClick={() => handleSort('province')}>ภ.จว. <SortIcon column="province" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('total')}>รวม <SortIcon column="total" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('atm')}>ATM <SortIcon column="atm" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('branch')}>สาขา <SortIcon column="branch" /></th>
-                <th className="px-6 py-4 text-right" onClick={() => handleSort('damage')}>ความเสียหาย <SortIcon column="damage" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('reported')}>ส่งรายงาน <SortIcon column="reported" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('identified')}>ยืนยัน <SortIcon column="identified" /></th>
-                <th className="px-6 py-4 text-center" onClick={() => handleSort('notIdentified')}>ไม่ยืนยัน <SortIcon column="notIdentified" /></th>
+              <tr className="text-slate-400 dark:text-slate-500 text-[10px] uppercase tracking-[0.2em] font-black border-b border-border">
+                <th className="px-8 py-4 cursor-pointer hover:text-primary transition-colors" onClick={() => handleSort('province')}>Province <SortIcon column="province" /></th>
+                <th className="px-8 py-4 text-center cursor-pointer hover:text-primary transition-colors" onClick={() => handleSort('total')}>Total Cases <SortIcon column="total" /></th>
+                <th className="px-8 py-4 text-center cursor-pointer hover:text-primary transition-colors" onClick={() => handleSort('atm')}>ATM <SortIcon column="atm" /></th>
+                <th className="px-8 py-4 text-center cursor-pointer hover:text-primary transition-colors" onClick={() => handleSort('branch')}>Branch <SortIcon column="branch" /></th>
+                <th className="px-8 py-4 text-right cursor-pointer hover:text-primary transition-colors" onClick={() => handleSort('damage')}>Damage (THB) <SortIcon column="damage" /></th>
+                <th className="px-8 py-4 text-center">Status Distribution</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-border">
               {provinceStats.map((p, idx) => (
-                <tr key={idx} className="bg-white dark:bg-slate-900/30 hover:bg-slate-50 dark:hover:bg-white/10 transition-all group border border-transparent shadow-sm dark:shadow-none">
-                  <td className="px-6 py-6 first:rounded-l-[1.5rem] border-l-2 border-transparent hover:border-blue-500">
-                    <span className="font-black text-slate-700 dark:text-slate-100 uppercase tracking-tighter">{p.province}</span>
+                <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-all group">
+                  <td className="px-8 py-5">
+                    <span className="font-black text-xs text-slate-700 dark:text-slate-200 uppercase">{p.province}</span>
                   </td>
-                  <td className="px-6 py-6 text-center"><span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-white px-3 py-1 rounded-lg text-xs font-black">{p.total}</span></td>
-                  <td className="px-6 py-6 text-center text-blue-600 dark:text-blue-400 font-bold text-xs">{p.atm}</td>
-                  <td className="px-6 py-6 text-center text-emerald-600 dark:text-emerald-400 font-bold text-xs">{p.branch}</td>
-                  <td className="px-6 py-6 text-right font-mono font-black text-slate-700 dark:text-white">฿{p.damage.toLocaleString()}</td>
-                  <td className="px-6 py-6 text-center"><span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 px-3 py-1 rounded-lg text-[10px] font-black">{p.reported}</span></td>
-                  <td className="px-6 py-6 text-center"><span className="bg-sky-500/10 text-sky-600 dark:text-sky-500 px-3 py-1 rounded-lg text-[10px] font-black">{p.identified}</span></td>
-                  <td className="px-6 py-6 last:rounded-r-[1.5rem] text-center"><span className="bg-red-500/10 text-red-600 dark:text-red-500 px-3 py-1 rounded-lg text-[10px] font-black">{p.notIdentified}</span></td>
+                  <td className="px-8 py-5 text-center">
+                    <span className="bg-blue-600/10 text-blue-600 px-3 py-1 rounded-lg text-[10px] font-black">{p.total}</span>
+                  </td>
+                  <td className="px-8 py-5 text-center text-xs font-bold text-slate-500">{p.atm}</td>
+                  <td className="px-8 py-5 text-center text-xs font-bold text-slate-500">{p.branch}</td>
+                  <td className="px-8 py-5 text-right font-mono font-black text-sm text-slate-700 dark:text-white italic">
+                    ฿{p.damage.toLocaleString()}
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex justify-center gap-2">
+                      <span title="Identified" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 px-3 py-1 rounded-lg text-[10px] font-black">{p.identified}</span>
+                      <span title="Not Identified" className="bg-red-500/10 text-red-600 dark:text-red-500 px-3 py-1 rounded-lg text-[10px] font-black">{p.notIdentified}</span>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

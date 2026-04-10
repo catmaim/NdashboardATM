@@ -29,6 +29,7 @@ import {
   UserX,
   ShieldCheck,
   Zap,
+  X,
   LucideIcon
 } from 'lucide-react';
 import { 
@@ -51,8 +52,12 @@ const BANK_CONFIG: { [key: string]: { color: string, patterns: string[] } } = {
   'กรุงไทย': { color: '#00AEEF', patterns: ['กรุงไทย', 'KTB'] },
   'กรุงศรี': { color: '#FFD400', patterns: ['กรุงศรี', 'BAY'] },
   'ออมสิน': { color: '#EB198D', patterns: ['ออมสิน', 'GSB'] },
-  'ttb': { color: '#F7941D', patterns: ['ทีทีบี', 'TTB', 'ทหารไทย'] },
-  'ธ.ก.ส.': { color: '#006127', patterns: ['ธ.ก.ส', 'ธกส'] },
+  'ทีทีบี': { color: '#F7941D', patterns: ['ทีทีบี', 'TTB', 'ทหารไทย'] },
+  'ธ.ก.ส.': { color: '#006127', patterns: ['ธ.ก.ส', 'ธกส', 'BAAC'] },
+  'ยูโอบี': { color: '#003366', patterns: ['ยูโอบี', 'UOB'] },
+  'ซีไอเอ็มบี': { color: '#7E191B', patterns: ['ซีไอเอ็มบี', 'CIMB'] },
+  'แลนด์ แอนด์ เฮ้าส์': { color: '#6EC1E4', patterns: ['แลนด์ แอนด์ เฮ้าส์', 'LH BANK', 'LHB'] },
+  'อาคารสงเคราะห์': { color: '#F58220', patterns: ['อาคารสงเคราะห์', 'GH BANK'] },
   'อื่นๆ': { color: '#64748b', patterns: [] }
 };
 
@@ -65,8 +70,36 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [selectedCase, setSelectedCase] = useState<CaseData | null>(null);
 
   const isDark = theme === 'dark';
+
+  // เพิ่มฟังก์ชันกลางสำหรับระบุธนาคาร
+  const identifyBank = (item: CaseData): string => {
+    const bankRaw = item.type === 'atm' ? (item.raw?.['เจ้าของเครื่อง'] || item.bank || '') : (item.bank || '');
+    const bankName = String(bankRaw).trim().toUpperCase();
+    if (!bankName) return 'อื่นๆ';
+
+    for (const [key, config] of Object.entries(BANK_CONFIG)) {
+      if (key === 'อื่นๆ') continue;
+      if (config.patterns.some(p => bankName.includes(p.toUpperCase())) || bankName.includes(key.toUpperCase())) {
+        return key;
+      }
+    }
+    
+    // พยายามดึงชื่อธนาคารจากฟิลด์ bank ตรงๆ ถ้ามี
+    const bankField = String(item.bank || '').trim().toUpperCase();
+    if (bankField) {
+      for (const [key, config] of Object.entries(BANK_CONFIG)) {
+        if (key === 'อื่นๆ') continue;
+        if (config.patterns.some(p => bankField.includes(p.toUpperCase())) || bankField.includes(key.toUpperCase())) {
+          return key;
+        }
+      }
+    }
+
+    return bankRaw || 'อื่นๆ';
+  };
 
   const loadData = async () => {
     setRefreshing(true);
@@ -88,7 +121,18 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
       if (startDate && item.timestamp && new Date(item.timestamp) < new Date(startDate)) return false;
       if (endDate && item.timestamp && new Date(item.timestamp) > new Date(endDate)) return false;
       if (selectedProvince && !String(item.raw?.[' ภ.จว.'] || item.raw?.['ภ.จว.'] || '').trim().includes(selectedProvince)) return false;
-      if (selectedBank && !String(item.bank || '').includes(selectedBank)) return false;
+      
+      if (selectedBank) {
+        const itemBankStandard = identifyBank(item);
+        if (itemBankStandard.toUpperCase() !== selectedBank.toUpperCase()) {
+          // ถ้าไม่ตรงตรงๆ ลองเช็คดูว่าชื่อดิบมีส่วนเกี่ยวข้องไหม
+          const bankRaw = item.type === 'atm' ? (item.raw?.['เจ้าของเครื่อง'] || '') : (item.bank || '');
+          if (!String(bankRaw).toUpperCase().includes(selectedBank.toUpperCase())) {
+             return false;
+          }
+        }
+      }
+
       if (selectedType && item.type !== selectedType) return false;
       return true;
     });
@@ -113,31 +157,22 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
 
     const bankMap: { [key: string]: number } = {};
     allFilteredData.forEach(item => {
-      const bankRaw = item.type === 'atm' ? (item.raw?.['เจ้าของเครื่อง'] || '') : (item.bank || '');
-      const bankName = String(bankRaw).trim();
-      if (!bankName) return;
-      let matchedKey = 'อื่นๆ';
-      for (const itemPattern of [
-        { key: 'กสิกรไทย', patterns: ['กสิกร', 'KBANK'] },
-        { key: 'ไทยพาณิชย์', patterns: ['ไทยพาณิชย์', 'SCB'] },
-        { key: 'กรุงเทพ', patterns: ['กรุงเทพ', 'BBL'] },
-        { key: 'กรุงไทย', patterns: ['กรุงไทย', 'KTB'] },
-        { key: 'กรุงศรี', patterns: ['กรุงศรี', 'BAY'] },
-        { key: 'ออมสิน', patterns: ['ออมสิน', 'GSB'] },
-        { key: 'ttb', patterns: ['ทีทีบี', 'TTB'] },
-        { key: 'ธ.ก.ส.', patterns: ['ธ.ก.ส', 'ธกส'] }
-      ]) {
-        if (itemPattern.patterns.some(p => bankName.toUpperCase().includes(p.toUpperCase()))) {
-          matchedKey = itemPattern.key; break;
-        }
-      }
-      bankMap[matchedKey] = (bankMap[matchedKey] || 0) + 1;
+      const finalKey = identifyBank(item);
+      bankMap[finalKey] = (bankMap[finalKey] || 0) + 1;
     });
+
     const bankData = Object.keys(bankMap).map(key => ({
-      name: key, count: bankMap[key], fill: BANK_CONFIG[key]?.color || '#64748b'
+      name: key, 
+      count: bankMap[key], 
+      fill: BANK_CONFIG[key]?.color || '#94a3b8'
     })).sort((a, b) => b.count - a.count);
 
-    return { provinceData, bankData };
+    const typeData = [
+      { name: 'ATM Withdrawal', count: allFilteredData.filter(i => i.type === 'atm').length, fill: '#3b82f6' },
+      { name: 'Branch Counter', count: allFilteredData.filter(i => i.type === 'branch').length, fill: '#10b981' }
+    ];
+
+    return { provinceData, bankData, typeData };
   }, [allFilteredData]);
 
   const displayData = useMemo(() => {
@@ -151,19 +186,35 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
   const currentItems = displayData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(displayData.length / itemsPerPage);
 
-  // ฟังก์ชันกำหนดสีตามสถานะ
   const getStatusColor = (status: string, arrest: string) => {
     const s = String(status || '').toLowerCase();
     const a = String(arrest || '').toLowerCase();
     
-    if (a.includes('จับกุมแล้ว') || s.includes('เสร็จสิ้น') || s.includes('สืบสวนแล้ว')) 
+    if (a.includes('จับกุม') || s.includes('เสร็จสิ้น') || s.includes('สืบสวนแล้ว') || s.includes('ส่งรายงาน') || s.includes('เรียบร้อย')) {
       return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/20';
-    if (s.includes('ยืนยันตัว') || s.includes('พิสูจน์ทราบ')) 
+    }
+
+    if (s.includes('ยืนยันตัว') || s.includes('พิสูจน์ทราบ') || s.includes('ออกหมาย') || s.includes('รู้ตัว') || s.includes('ส่งสภ')) {
       return 'bg-sky-500/10 text-sky-600 dark:text-sky-500 border-sky-500/20';
-    if (s.includes('ไม่ยืนยัน')) 
+    }
+
+    if (s.includes('ไม่ยืนยัน') || s.includes('ไม่ชัด') || s.includes('ไม่พบ') || s.includes('ยกเลิก')) {
       return 'bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/20';
+    }
     
     return 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border-amber-500/20';
+  };
+
+  const getBankColor = (bankName: string) => {
+    if (!bankName) return '#94a3b8';
+    const name = String(bankName).toUpperCase();
+    for (const [key, config] of Object.entries(BANK_CONFIG)) {
+      if (key === 'อื่นๆ') continue;
+      if (config.patterns.some(p => name.includes(p.toUpperCase())) || name.includes(key.toUpperCase())) {
+        return config.color;
+      }
+    }
+    return '#94a3b8';
   };
 
   if (loading) return (
@@ -185,10 +236,10 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
         <StatCard label="ผ่านการสืบสวน" value={stats.investigationPassed} Icon={ShieldCheck} color="text-indigo-500" />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
           <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><MapPin size={16} className="text-blue-500" /> Frequency by Province</h3>
-          <div className="h-[350px]">
+          <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData.provinceData} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#1e293b' : '#e2e8f0'} />
@@ -205,11 +256,11 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
 
         <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
           <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><Building2 size={16} className="text-emerald-500" /> Frequency by Bank</h3>
-          <div className="h-[350px]">
+          <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData.bankData} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#1e293b' : '#e2e8f0'} />
-                <XAxis dataKey="name" fontSize={8} fontWeight="bold" stroke={isDark ? '#94a3b8' : '#64748b'} interval={0} angle={-35} textAnchor="end" height={80} />
+                <XAxis dataKey="name" fontSize={8} fontWeight="bold" stroke={isDark ? '#94a3b8' : '#64748b'} interval={0} angle={-35} textAnchor="end" height={60} />
                 <YAxis fontSize={10} stroke={isDark ? '#94a3b8' : '#64748b'} />
                 <Tooltip />
                 <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -217,6 +268,35 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
                   <LabelList dataKey="count" position="top" style={{ fontSize: 10, fontWeight: 'bold', fill: isDark ? '#94a3b8' : '#64748b' }} />
                 </Bar>
               </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-card p-8 rounded-[2.5rem] border border-border shadow-sm">
+          <h3 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em] mb-8 flex items-center gap-2"><PieChartIcon size={16} className="text-purple-500" /> Operational Share</h3>
+          <div className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData.typeData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={8}
+                  dataKey="count"
+                  nameKey="name"
+                >
+                  {chartData.typeData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px' }} />
+              </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -255,17 +335,28 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
             <tbody>
               {currentItems.map((row, idx) => (
                 <tr key={idx} className="bg-slate-50/30 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all group border border-transparent shadow-sm dark:shadow-none">
-                  <td className="px-6 py-5 first:rounded-l-2xl border-l-2 border-transparent hover:border-primary">
+                  <td 
+                    className="px-6 py-5 first:rounded-l-2xl border-l-4 transition-all"
+                    style={{ borderLeftColor: getBankColor(identifyBank(row)) }}
+                  >
                     <div className="flex flex-col">
                       <span className="font-black text-xs text-slate-700 dark:text-slate-200">{row.timestamp || 'N/A'}</span>
-                      <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold mt-1 uppercase truncate max-w-[200px]">{row.location}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: getBankColor(identifyBank(row)) }}></div>
+                        <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold mt-0.5 uppercase truncate max-w-[200px]">{row.location}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
                       <span className="font-black text-blue-600 dark:text-blue-400 text-xs uppercase group-hover:text-blue-700">{row.accountName || 'N/A'}</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[9px] font-black bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-500 uppercase">{row.bank}</span>
+                        <span 
+                          className="text-[9px] font-black px-1.5 py-0.5 rounded text-white uppercase shadow-sm"
+                          style={{ backgroundColor: getBankColor(identifyBank(row)) }}
+                        >
+                          {identifyBank(row)}
+                        </span>
                         <span className="text-slate-400 text-[10px] font-bold uppercase">สภ. {row.station || '-'}</span>
                       </div>
                     </div>
@@ -279,7 +370,12 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
                   <td className="px-6 py-5 last:rounded-r-2xl text-center">
                     <div className="flex justify-center gap-2">
                       {row.reportLink && <a href={row.reportLink} target="_blank" className="p-2.5 bg-blue-600/10 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"><ExternalLink size={16} /></a>}
-                      <button className="p-2.5 bg-background border border-border text-slate-400 rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm"><Camera size={16} /></button>
+                      <button 
+                        onClick={() => setSelectedCase(row)}
+                        className="p-2.5 bg-background border border-border text-slate-400 rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm"
+                      >
+                        <Camera size={16} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -296,6 +392,92 @@ export default function Dashboard({ startDate, endDate, selectedProvince, select
           </div>
         </div>
       </div>
+
+      {/* Intel Detail Modal */}
+      {selectedCase && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setSelectedCase(null)}></div>
+          <div className="bg-card w-full max-w-2xl rounded-[3rem] border border-border shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-8 border-b border-border bg-slate-50/50 dark:bg-white/5 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary text-white rounded-2xl shadow-lg shadow-primary/20">
+                  <Fingerprint size={24} />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg tracking-tighter uppercase leading-none">Tactical Intel</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Case ID: {selectedCase.id || 'N/A'}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedCase(null)}
+                className="p-3 hover:bg-slate-200 dark:hover:bg-white/10 rounded-2xl transition-all"
+              >
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-8">
+              <div className="grid grid-cols-2 gap-8">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><UserCheck size={14} className="text-blue-500" /> Account Name</p>
+                  <p className="text-sm font-black text-foreground uppercase">{selectedCase.accountName || 'UNKNOWN'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><CreditCard size={14} className="text-emerald-500" /> Account Number</p>
+                  <p className="text-sm font-mono font-black text-foreground">{selectedCase.accountNumber || 'N/A'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Building2 size={14} className="text-purple-500" /> Bank / Source</p>
+                  <p className="text-sm font-black text-foreground uppercase">{identifyBank(selectedCase)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={14} className="text-red-500" /> Transaction Value</p>
+                  <p className="text-sm font-black text-red-600 uppercase">฿{selectedCase.amount?.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="p-6 bg-slate-100 dark:bg-white/5 rounded-[2rem] border border-border space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-background rounded-xl border border-border mt-1">
+                    <MapPin size={16} className="text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Operation Location</p>
+                    <p className="text-xs font-bold text-foreground mt-1 leading-relaxed">{selectedCase.location || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="p-2 bg-background rounded-xl border border-border mt-1">
+                    <ShieldAlert size={16} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Investigation Status</p>
+                    <p className="text-xs font-bold text-foreground mt-1 leading-relaxed">{selectedCase.status || 'CHECKING'} - {selectedCase.result || 'PENDING ANALYSIS'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                {selectedCase.reportLink && (
+                  <a 
+                    href={selectedCase.reportLink} 
+                    target="_blank" 
+                    className="flex-1 flex items-center justify-center gap-3 bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20"
+                  >
+                    <FileCheck size={18} /> View Full Report
+                  </a>
+                )}
+                <button 
+                  onClick={() => setSelectedCase(null)}
+                  className="flex-1 bg-slate-100 dark:bg-white/10 text-foreground py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-white/20 transition-all"
+                >
+                  Close Intel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

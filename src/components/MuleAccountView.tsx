@@ -65,11 +65,54 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
+      // Date Filter
       if (startDate && item.timestamp && new Date(item.timestamp) < new Date(startDate)) return false;
       if (endDate && item.timestamp && new Date(item.timestamp) > new Date(endDate)) return false;
-      if (selectedProvince && !String(item.raw?.[' ภ.จว.'] || item.raw?.['ภ.จว.'] || '').trim().includes(selectedProvince)) return false;
-      if (selectedBank && !String(item.bank || '').includes(selectedBank)) return false;
+      
+      // Province Filter
+      const prov = String(item.raw?.[' ภ.จว.'] || item.raw?.['ภ.จว.'] || '').trim();
+      if (selectedProvince && !prov.includes(selectedProvince)) return false;
+      
+      // Bank Filter (Unified Logic)
+      if (selectedBank) {
+        const bankRaw = item.type === 'atm' ? (item.raw?.['เจ้าของเครื่อง'] || item.bank || '') : (item.bank || '');
+        const bankName = String(bankRaw).trim().toUpperCase();
+        const selectedBankUpper = selectedBank.toUpperCase();
+        
+        const patterns: { [key: string]: string[] } = {
+          'กสิกรไทย': ['กสิกร', 'KBANK', 'K-BANK'],
+          'ไทยพาณิชย์': ['ไทยพาณิชย์', 'SCB'],
+          'กรุงเทพ': ['กรุงเทพ', 'BBL'],
+          'กรุงไทย': ['กรุงไทย', 'KTB'],
+          'กรุงศรี': ['กรุงศรี', 'BAY'],
+          'ออมสิน': ['ออมสิน', 'GSB'],
+          'ทีทีบี': ['ทีทีบี', 'TTB', 'ทหารไทย'],
+          'ธ.ก.ส.': ['ธ.ก.ส', 'ธกส', 'BAAC'],
+          'ยูโอบี': ['ยูโอบี', 'UOB'],
+          'ซีไอเอ็มบี': ['ซีไอเอ็มบี', 'CIMB'],
+          'แลนด์ แอนด์ เฮ้าส์': ['แลนด์ แอนด์ เฮ้าส์', 'LH BANK', 'LHB'],
+          'อาคารสงเคราะห์': ['อาคารสงเคราะห์', 'GH BANK']
+        };
+
+        let isMatch = bankName.includes(selectedBankUpper);
+        if (!isMatch && patterns[selectedBank]) {
+          isMatch = patterns[selectedBank].some(p => bankName.includes(p.toUpperCase()));
+        }
+        
+        if (!isMatch && item.bank) {
+          const bField = String(item.bank).toUpperCase();
+          isMatch = bField.includes(selectedBankUpper);
+          if (!isMatch && patterns[selectedBank]) {
+            isMatch = patterns[selectedBank].some(p => bField.includes(p.toUpperCase()));
+          }
+        }
+
+        if (!isMatch) return false;
+      }
+
+      // Type Filter
       if (selectedType && item.type !== selectedType) return false;
+      
       return true;
     });
   }, [data, startDate, endDate, selectedProvince, selectedBank, selectedType]);
