@@ -1,9 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet.heat';
 
 interface HeatLayerProps {
   points: [number, number, number][]; // [lat, lng, intensity]
@@ -11,11 +9,23 @@ interface HeatLayerProps {
 
 export default function MapHeatLayer({ points }: HeatLayerProps) {
   const map = useMap();
+  const [L, setL] = useState<any>(null);
 
   useEffect(() => {
-    if (!map || !points.length) return;
+    if (typeof window !== 'undefined') {
+      const loadLeaflet = async () => {
+        const leaflet = await import('leaflet');
+        // @ts-ignore
+        await import('leaflet.heat');
+        setL(leaflet.default || leaflet);
+      };
+      loadLeaflet();
+    }
+  }, []);
 
-    // @ts-ignore
+  useEffect(() => {
+    if (!map || !points.length || !L || !L.heatLayer) return;
+
     const heatLayer = L.heatLayer(points, {
       radius: 25,
       blur: 15,
@@ -32,7 +42,7 @@ export default function MapHeatLayer({ points }: HeatLayerProps) {
     return () => {
       map.removeLayer(heatLayer);
     };
-  }, [map, points]);
+  }, [map, points, L]);
 
   return null;
 }

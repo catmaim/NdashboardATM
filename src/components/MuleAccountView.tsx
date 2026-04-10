@@ -162,7 +162,7 @@ export default function MuleAccountView({ startDate, endDate, selectedProvince, 
                 <YAxis dataKey="name" type="category" stroke={isDark ? '#94a3b8' : '#64748b'} fontSize={10} width={100} fontWeight="bold" />
                 <Tooltip />
                 <Bar dataKey="totalAmount" fill="#3b82f6" radius={[0, 4, 4, 0]}>
-                  <LabelList dataKey="totalAmount" position="right" formatter={(val: number) => `฿${val.toLocaleString()}`} style={{ fill: '#3b82f6', fontSize: 10, fontWeight: 'bold' }} />
+                  <LabelList dataKey="totalAmount" position="right" formatter={(val: any) => `฿${Number(val || 0).toLocaleString()}`} style={{ fill: '#3b82f6', fontSize: 10, fontWeight: 'bold' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
